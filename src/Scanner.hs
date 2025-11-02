@@ -1,6 +1,8 @@
 module Scanner (scan) where
 
-import Types (Token(..), ScanResult(..))
+import Types
+import ScannerState
+import CharLib
 
 scan :: String -> ScanResult
 scan src = scanImpl (ScannerState src 0)
@@ -14,40 +16,6 @@ scanImpl state =
     Ignored newState         -> scanImpl newState
     End                      -> TokenList []
     ScanTokenError lineNo    -> ScanError lineNo
-
-data ScannerState = ScannerState String Int
-
-getLineNo :: ScannerState -> Int
-getLineNo (ScannerState _ lineNo) = lineNo
-
-getSrc :: ScannerState -> String
-getSrc (ScannerState src _) = src
-
-peek :: ScannerState -> Maybe Char
-peek state = 
-  case getSrc state of
-    "" -> Nothing
-    c:_ -> Just c
-
-peek2 :: ScannerState -> Maybe (Char,Char)
-peek2 state = 
-  case getSrc state of
-    "" -> Nothing
-    c:"" -> Nothing
-    c1:(c2:_) -> Just (c1,c2)
-
-advance :: ScannerState -> Maybe (Char, ScannerState)
-advance (ScannerState src lineNo) = 
-  case src of
-    "" -> Nothing
-    c:rest -> let newLineNo = if c == '\n' then lineNo+1 else lineNo
-              in Just (c, ScannerState rest newLineNo)
-
-advanceIf :: (Char -> Bool) -> ScannerState -> Maybe (Char, ScannerState)
-advanceIf predicate state =
-  case peek state of
-    Just c | predicate c -> advance state
-    _ -> Nothing
 
 data ScanTokenResult
   = FoundToken Token ScannerState
@@ -102,17 +70,6 @@ advanceUntilEndOfLine state =
   let (_, newState) = advanceWhile (\c -> c /= '\n') state
   in newState
 
-advanceWhile :: (Char -> Bool) -> ScannerState -> (String, ScannerState)
-advanceWhile predicate state = 
-  case advanceIf predicate state of
-    Nothing -> ("", state)
-    Just (c, newState) ->
-      let (suffix, finalState) = advanceWhile predicate newState
-      in (c:suffix, finalState)
-
-isWhiteSpace :: Char -> Bool
-isWhiteSpace c = c `elem` " \r\t\n"
-
 scanString :: ScannerState -> ScanTokenResult
 scanString state =
   let (str, newState) = advanceWhile (\c -> c /= '"') state
@@ -135,12 +92,6 @@ scanNumber c state =
       _ -> (integerPart, stateAfterInteger)
     number = read numberStr :: Double
   in FoundToken (Number number) finalState
-
-isDigit :: Char -> Bool
-isDigit c = c `elem` "0123456789"
-
-isAlpha :: Char -> Bool
-isAlpha c = c `elem` "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 
 scanWord :: Char -> ScannerState -> ScanTokenResult
 scanWord c state = 
@@ -169,6 +120,3 @@ wordToToken word =
     "var" -> VarToken
     "while" -> WhileToken
     _ -> Identifier word
-
-isAlphaNumeric :: Char -> Bool
-isAlphaNumeric c = isDigit c || isAlpha c
