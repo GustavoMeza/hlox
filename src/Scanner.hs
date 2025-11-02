@@ -55,7 +55,7 @@ scanTokenStartingWith c state =
 
 scanTokenWithMaybeEqual :: Token -> Token -> ScannerState -> ScanTokenResult
 scanTokenWithMaybeEqual tokenIf tokenElse state =
-  case advanceIf (\c -> c == '=') state of
+  case advanceIf (== '=') state of
     Nothing -> FoundToken tokenElse state
     Just (_, newState) -> FoundToken tokenIf newState
 
@@ -67,13 +67,13 @@ scanSlashOrIgnoreComment state =
 
 advanceUntilEndOfLine :: ScannerState -> ScannerState
 advanceUntilEndOfLine state =
-  let (_, newState) = advanceWhile (\c -> c /= '\n') state
+  let (_, newState) = advanceWhile (/= '\n') state
   in newState
 
 scanString :: ScannerState -> ScanTokenResult
 scanString state =
-  let (str, newState) = advanceWhile (\c -> c /= '"') state
-  in case advanceIf (\c -> c == '"') newState of
+  let (str, newState) = advanceWhile (/= '"') state
+  in case advanceIf (== '"') newState of
     Nothing -> ScanTokenError (getLineNo newState)
     Just (_, finalState) -> FoundToken (StringToken str) finalState
     
