@@ -7,6 +7,12 @@ import CharLib
 scan :: String -> ScanResult
 scan src = scanImpl (ScannerState src 0)
 
+data ScanTokenResult
+  = FoundToken Token ScannerState
+  | Ignored ScannerState
+  | End
+  | ScanTokenError Int
+
 scanImpl :: ScannerState -> ScanResult
 scanImpl state = 
   case scanToken state of
@@ -16,12 +22,6 @@ scanImpl state =
     Ignored newState         -> scanImpl newState
     End                      -> TokenList []
     ScanTokenError lineNo    -> ScanError lineNo
-
-data ScanTokenResult
-  = FoundToken Token ScannerState
-  | Ignored ScannerState
-  | End
-  | ScanTokenError Int
 
 scanToken :: ScannerState -> ScanTokenResult
 scanToken state =
@@ -98,7 +98,8 @@ scanWord c state =
   let
     (restOfWord, stateAfterWord) = advanceWhile isAlphaNumeric state
     word = c:restOfWord
-  in FoundToken (wordToToken word) stateAfterWord
+    token = wordToToken word
+  in FoundToken token stateAfterWord
 
 wordToToken :: String -> Token
 wordToToken word =
