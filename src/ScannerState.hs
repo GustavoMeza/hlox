@@ -2,7 +2,7 @@ module ScannerState (
   ScannerState(..),
   getLineNo,
   peek,
-  peek2,
+  peekNext,
   advance,
   advanceIf,
   advanceWhile,
@@ -22,12 +22,11 @@ peek state =
     "" -> Nothing
     c:_ -> Just c
 
-peek2 :: ScannerState -> Maybe (Char,Char)
-peek2 state = 
+peekNext :: ScannerState -> Maybe Char
+peekNext state = 
   case getSrc state of
-    "" -> Nothing
-    c:"" -> Nothing
-    c1:(c2:_) -> Just (c1,c2)
+    _:(c2:_) -> Just c2
+    _ -> Nothing
 
 advance :: ScannerState -> Maybe (Char, ScannerState)
 advance (ScannerState src lineNo) = 

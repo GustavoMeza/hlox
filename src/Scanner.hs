@@ -82,16 +82,22 @@ scanNumber c state =
   let
     (restOfIntegerPart, stateAfterInteger) = advanceWhile isDigit state
     integerPart = c:restOfIntegerPart
-    (numberStr, finalState) = case peek2 stateAfterInteger of
-      Just ('.',c) | isDigit c -> 
-        case advance stateAfterInteger of
-          Nothing -> (integerPart, stateAfterInteger)
-          Just (_, stateAfterPoint) -> 
-            let (fractionalPart, stateAfterFractional) = advanceWhile isDigit stateAfterPoint
-            in (integerPart ++ "." ++ fractionalPart, stateAfterFractional)
-      _ -> (integerPart, stateAfterInteger)
+    (numberStr, finalState) = tryScanFractionalPart integerPart stateAfterInteger
     number = read numberStr :: Double
   in FoundToken (Number number) finalState
+
+tryScanFractionalPart :: String -> ScannerState -> (String, ScannerState)
+tryScanFractionalPart integerPart state =
+  case peek state of
+    Just '.' -> case peekNext state of
+      Just c | isDigit c ->
+        let
+          Just (_, stateAfterPoint) = advance state
+          (fractionalPart, stateAfterFractional) = advanceWhile isDigit stateAfterPoint
+          lexeme = integerPart ++ "." ++ fractionalPart
+        in (lexeme, stateAfterFractional)
+      _ -> (integerPart, state)
+    _ -> (integerPart, state)
 
 scanWord :: Char -> ScannerState -> ScanTokenResult
 scanWord c state = 
