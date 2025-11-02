@@ -18,7 +18,7 @@ scanImpl state =
   case scanToken state of
     FoundToken token newState -> case scanImpl newState of
       TokenList tokens -> TokenList (token:tokens)
-      error -> error
+      ScanError lineNo -> ScanError lineNo
     Ignored newState         -> scanImpl newState
     End                      -> TokenList []
     ScanTokenError lineNo    -> ScanError lineNo

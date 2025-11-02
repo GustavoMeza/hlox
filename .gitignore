@@ -1,4 +1,4 @@
 extras/*
 dist/*
 dist-newstyle/*
-.ghc*
+.*
