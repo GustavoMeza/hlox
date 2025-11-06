@@ -1,10 +1,10 @@
 module Main (main) where
 
-import System.IO (getContents)
 import Scanner (scan)
-import Types (Token, ScanResult(..))
+import System.IO (getContents)
+import Types (ScanResult (..), Token)
 
-printElements :: Show a => [a] -> IO ()
+printElements :: (Show a) => [a] -> IO ()
 printElements arr = mapM_ (putStrLn . show) arr
 
 main :: IO ()

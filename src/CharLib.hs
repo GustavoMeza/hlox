@@ -1,9 +1,10 @@
-module CharLib (
-  isDigit,
-  isAlpha,
-  isWhiteSpace,
-  isAlphaNumeric
-) where
+module CharLib
+  ( isDigit,
+    isAlpha,
+    isWhiteSpace,
+    isAlphaNumeric,
+  )
+where
 
 isDigit :: Char -> Bool
 isDigit c = c `elem` "0123456789"

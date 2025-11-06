@@ -1,8 +1,8 @@
 module ScannerSpec (spec) where
 
-import Test.Hspec
 import Scanner (scan)
-import Types (Token(..), ScanResult(..))
+import Test.Hspec
+import Types (ScanResult (..), Token (..))
 
 spec :: Spec
 spec = do
@@ -48,7 +48,7 @@ spec = do
     it "Parses slash" $ do
       scan "/" `shouldBe` TokenList [Slash]
     it "Skips comments" $ do
-      scan "// A comment" `shouldBe` TokenList [] 
+      scan "// A comment" `shouldBe` TokenList []
     it "Skips spaces" $ do
       scan " " `shouldBe` TokenList []
     it "Skips returns" $ do
@@ -60,7 +60,7 @@ spec = do
     it "Parses strings" $ do
       scan "\"Hello world\"" `shouldBe` TokenList [StringToken "Hello world"]
     it "Parses numbers" $ do
-      scan "1.23" `shouldBe` TokenList [Number  1.23]
+      scan "1.23" `shouldBe` TokenList [Number 1.23]
     it "Parses and" $ do
       scan "and" `shouldBe` TokenList [AndToken]
     it "Parses class" $ do
@@ -100,6 +100,8 @@ spec = do
     it "Counts line error" $ do
       scan "\n\n\"Hello\nWorld" `shouldBe` ScanError 3
     it "Continues reading" $ do
-      scan "// this is a comment\n\
-           \(( )){} // grouping stuff\n\
-           \!*+-/=<> <= == // operators" `shouldBe` TokenList [LeftParen, LeftParen, RightParen, RightParen, LeftBrace, RightBrace, Bang, Star, Plus, Minus, Slash, Equal, Less, Greater, LessEqual, EqualEqual]
+      scan
+        "// this is a comment\n\
+        \(( )){} // grouping stuff\n\
+        \!*+-/=<> <= == // operators"
+        `shouldBe` TokenList [LeftParen, LeftParen, RightParen, RightParen, LeftBrace, RightBrace, Bang, Star, Plus, Minus, Slash, Equal, Less, Greater, LessEqual, EqualEqual]

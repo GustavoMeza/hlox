@@ -1,12 +1,13 @@
-module ScannerState (
-  ScannerState(..),
-  getLineNo,
-  peek,
-  peekNext,
-  advance,
-  advanceIf,
-  advanceWhile,
-) where
+module ScannerState
+  ( ScannerState (..),
+    getLineNo,
+    peek,
+    peekNext,
+    advance,
+    advanceIf,
+    advanceWhile,
+  )
+where
 
 data ScannerState = ScannerState String Int
 
@@ -17,23 +18,24 @@ getSrc :: ScannerState -> String
 getSrc (ScannerState src _) = src
 
 peek :: ScannerState -> Maybe Char
-peek state = 
+peek state =
   case getSrc state of
     "" -> Nothing
-    c:_ -> Just c
+    c : _ -> Just c
 
 peekNext :: ScannerState -> Maybe Char
-peekNext state = 
+peekNext state =
   case getSrc state of
-    _:(c2:_) -> Just c2
+    _ : (c2 : _) -> Just c2
     _ -> Nothing
 
 advance :: ScannerState -> Maybe (Char, ScannerState)
-advance (ScannerState src lineNo) = 
+advance (ScannerState src lineNo) =
   case src of
     "" -> Nothing
-    c:rest -> let newLineNo = if c == '\n' then lineNo+1 else lineNo
-              in Just (c, ScannerState rest newLineNo)
+    c : rest ->
+      let newLineNo = if c == '\n' then lineNo + 1 else lineNo
+       in Just (c, ScannerState rest newLineNo)
 
 advanceIf :: (Char -> Bool) -> ScannerState -> Maybe (Char, ScannerState)
 advanceIf predicate state =
@@ -42,10 +44,9 @@ advanceIf predicate state =
     _ -> Nothing
 
 advanceWhile :: (Char -> Bool) -> ScannerState -> (String, ScannerState)
-advanceWhile predicate state = 
+advanceWhile predicate state =
   case advanceIf predicate state of
     Nothing -> ("", state)
     Just (c, newState) ->
       let (suffix, finalState) = advanceWhile predicate newState
-      in (c:suffix, finalState)
-
+       in (c : suffix, finalState)
