@@ -1,7 +1,8 @@
-module Lexer (Token (..), LexingResult (..), Lexer.lex) where
+module Lexer (Lexer.lex, LexingError (..), Token (..)) where
 
 import CharLib
 import Scanner
+import Text.Read (readMaybe)
 
 data Token
   = LeftParen
@@ -42,73 +43,68 @@ data Token
   | VarToken
   | WhileToken
   | Identifier String
-  deriving (Eq, Show)
-
-data LexingResult
-  = TokenList [Token]
-  | LexingError Int
-  deriving (Eq, Show)
-
-lex :: String -> LexingResult
-lex src = scanImpl (Scanner src 0)
-
-scanImpl :: Scanner -> LexingResult
-scanImpl state =
-  case scanToken state of
-    FoundToken token newState -> case scanImpl newState of
-      TokenList tokens -> TokenList (token : tokens)
-      LexingError lineNo -> LexingError lineNo
-    Ignored newState -> scanImpl newState
-    End -> TokenList []
-    ScanTokenError lineNo -> LexingError lineNo
-
-data ScanTokenResult
-  = FoundToken Token Scanner
-  | Ignored Scanner
   | End
-  | ScanTokenError Int
+  deriving (Eq, Show)
+
+data LexingError = LexingError Int deriving (Eq, Show)
+
+lex :: String -> Either LexingError [Token]
+lex src = do
+  (tokens, _) <- lexImpl $ Scanner src 0
+  return tokens
+
+lexImpl :: Scanner -> Either LexingError ([Token], Scanner)
+lexImpl scanner = do
+  (token, scannerAfterToken) <- scanToken scanner
+  if token == End
+    then return ([End], scannerAfterToken)
+    else do
+      (restOfTokens, finalScanner) <- lexImpl scannerAfterToken
+      return (token:restOfTokens, finalScanner)
+
+type ScanTokenResult = Either LexingError (Token, Scanner)
 
 scanToken :: Scanner -> ScanTokenResult
 scanToken state =
   case advance state of
-    Nothing -> End
+    Nothing -> Right (End, state)
     Just (c, newScanner) -> scanTokenStartingWith c newScanner
 
 scanTokenStartingWith :: Char -> Scanner -> ScanTokenResult
 scanTokenStartingWith c state =
   case c of
-    '(' -> FoundToken LeftParen state
-    ')' -> FoundToken RightParen state
-    '{' -> FoundToken LeftBrace state
-    '}' -> FoundToken RightBrace state
-    ',' -> FoundToken Comma state
-    '.' -> FoundToken Dot state
-    '-' -> FoundToken Minus state
-    '+' -> FoundToken Plus state
-    ';' -> FoundToken Semicolon state
-    '*' -> FoundToken Star state
-    '!' -> scanTokenWithMaybeEqual BangEqual Bang state
-    '=' -> scanTokenWithMaybeEqual EqualEqual Equal state
-    '<' -> scanTokenWithMaybeEqual LessEqual Less state
-    '>' -> scanTokenWithMaybeEqual GreaterEqual Greater state
+    '(' -> Right (LeftParen, state)
+    ')' -> Right (RightParen, state)
+    '{' -> Right (LeftBrace, state)
+    '}' -> Right (RightBrace, state)
+    ',' -> Right (Comma, state)
+    '.' -> Right (Dot, state)
+    '-' -> Right (Minus, state)
+    '+' -> Right (Plus, state)
+    ';' -> Right (Semicolon, state)
+    '*' -> Right (Star, state)
+    '!' -> Right $ scanTokenWithMaybeEqual BangEqual Bang state
+    '=' -> Right $ scanTokenWithMaybeEqual EqualEqual Equal state
+    '<' -> Right $ scanTokenWithMaybeEqual LessEqual Less state
+    '>' -> Right $ scanTokenWithMaybeEqual GreaterEqual Greater state
     '/' -> scanSlashOrIgnoreComment state
     '"' -> scanString state
-    c | isWhiteSpace c -> Ignored state
+    c | isWhiteSpace c -> scanToken state
     c | isDigit c -> scanNumber c state
-    c | isAlpha c -> scanWord c state
-    _ -> ScanTokenError (getLineNo state)
+    c | isAlpha c -> Right $ scanWord c state
+    _ -> Left $ LexingError $ getLineNo state
 
-scanTokenWithMaybeEqual :: Token -> Token -> Scanner -> ScanTokenResult
+scanTokenWithMaybeEqual :: Token -> Token -> Scanner -> (Token, Scanner)
 scanTokenWithMaybeEqual tokenIf tokenElse state =
   case advanceIf (== '=') state of
-    Nothing -> FoundToken tokenElse state
-    Just (_, newState) -> FoundToken tokenIf newState
+    Nothing -> (tokenElse, state)
+    Just (_, newState) -> (tokenIf, newState)
 
 scanSlashOrIgnoreComment :: Scanner -> ScanTokenResult
 scanSlashOrIgnoreComment state =
   case peek state of
-    Just '/' -> Ignored (advanceUntilEndOfLine state)
-    _ -> FoundToken Slash state
+    Just '/' -> scanToken $ advanceUntilEndOfLine state
+    _ -> Right (Slash, state)
 
 advanceUntilEndOfLine :: Scanner -> Scanner
 advanceUntilEndOfLine state =
@@ -119,16 +115,18 @@ scanString :: Scanner -> ScanTokenResult
 scanString state =
   let (str, newState) = advanceWhile (/= '"') state
    in case advanceIf (== '"') newState of
-        Nothing -> ScanTokenError (getLineNo newState)
-        Just (_, finalState) -> FoundToken (StringToken str) finalState
+        Nothing -> Left $ LexingError $ getLineNo newState
+        Just (_, finalState) -> Right (StringToken str, finalState)
 
 scanNumber :: Char -> Scanner -> ScanTokenResult
 scanNumber c state =
   let (restOfIntegerPart, stateAfterInteger) = advanceWhile isDigit state
       integerPart = c : restOfIntegerPart
       (numberStr, finalState) = tryScanFractionalPart integerPart stateAfterInteger
-      number = read numberStr :: Double
-   in FoundToken (Number number) finalState
+      maybeNumber = readMaybe numberStr :: Maybe Double
+   in case maybeNumber of
+     Nothing -> Left $ LexingError $ getLineNo finalState
+     Just number -> Right (Number number, finalState)
 
 tryScanFractionalPart :: String -> Scanner -> (String, Scanner)
 tryScanFractionalPart integerPart state =
@@ -143,12 +141,12 @@ tryScanFractionalPart integerPart state =
       _ -> (integerPart, state)
     _ -> (integerPart, state)
 
-scanWord :: Char -> Scanner -> ScanTokenResult
+scanWord :: Char -> Scanner -> (Token, Scanner)
 scanWord c state =
   let (restOfWord, stateAfterWord) = advanceWhile isAlphaNumeric state
       word = c : restOfWord
       token = wordToToken word
-   in FoundToken token stateAfterWord
+   in (token, stateAfterWord)
 
 wordToToken :: String -> Token
 wordToToken word =
