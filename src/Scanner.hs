@@ -6,6 +6,7 @@ module Scanner
     advance,
     advanceIf,
     advanceWhile,
+    isEnd,
   )
 where
 
@@ -50,3 +51,6 @@ advanceWhile predicate state =
     Just (c, newState) ->
       let (suffix, finalState) = advanceWhile predicate newState
        in (c : suffix, finalState)
+
+isEnd :: Scanner -> Bool
+isEnd scanner = getSrc scanner == ""

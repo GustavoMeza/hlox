@@ -43,110 +43,83 @@ data Token
   | VarToken
   | WhileToken
   | Identifier String
-  | End
   deriving (Eq, Show)
 
 data LexingError = LexingError Int deriving (Eq, Show)
 
 lex :: String -> Either LexingError [Token]
 lex src = do
-  (tokens, _) <- lexImpl $ Scanner src 0
+  (tokens, _) <- extractTokens $ Scanner src 0
   return tokens
 
-lexImpl :: Scanner -> Either LexingError ([Token], Scanner)
-lexImpl scanner = do
-  (token, scannerAfterToken) <- scanToken scanner
-  if token == End
-    then return ([End], scannerAfterToken)
-    else do
-      (restOfTokens, finalScanner) <- lexImpl scannerAfterToken
-      return (token : restOfTokens, finalScanner)
+type ScanTokenResult = Either LexingError ([Token], Scanner)
 
-type ScanTokenResult = Either LexingError (Token, Scanner)
-
-scanToken :: Scanner -> ScanTokenResult
-scanToken state =
-  case advance state of
-    Nothing -> Right (End, state)
+extractTokens :: Scanner -> ScanTokenResult
+extractTokens scanner = do
+  case advance scanner of
+    Nothing -> return ([], scanner)
     Just (c, newScanner) -> scanTokenStartingWith c newScanner
 
 scanTokenStartingWith :: Char -> Scanner -> ScanTokenResult
-scanTokenStartingWith c state =
+scanTokenStartingWith c scanner =
   case c of
-    '(' -> Right (LeftParen, state)
-    ')' -> Right (RightParen, state)
-    '{' -> Right (LeftBrace, state)
-    '}' -> Right (RightBrace, state)
-    ',' -> Right (Comma, state)
-    '.' -> Right (Dot, state)
-    '-' -> Right (Minus, state)
-    '+' -> Right (Plus, state)
-    ';' -> Right (Semicolon, state)
-    '*' -> Right (Star, state)
-    '!' -> Right $ scanTokenWithMaybeEqual BangEqual Bang state
-    '=' -> Right $ scanTokenWithMaybeEqual EqualEqual Equal state
-    '<' -> Right $ scanTokenWithMaybeEqual LessEqual Less state
-    '>' -> Right $ scanTokenWithMaybeEqual GreaterEqual Greater state
-    '/' -> scanSlashOrIgnoreComment state
-    '"' -> scanString state
-    c | isWhiteSpace c -> scanToken state
-    c | isDigit c -> scanNumber c state
-    c | isAlpha c -> Right $ scanWord c state
-    _ -> Left $ LexingError $ getLineNo state
+    '(' -> prependToken LeftParen scanner
+    ')' -> prependToken RightParen scanner
+    '{' -> prependToken LeftBrace scanner
+    '}' -> prependToken RightBrace scanner
+    ',' -> prependToken Comma scanner
+    '.' -> prependToken Dot scanner
+    '-' -> prependToken Minus scanner
+    '+' -> prependToken Plus scanner
+    ';' -> prependToken Semicolon scanner
+    '*' -> prependToken Star scanner
+    '!' -> scanTokenWithMaybeEqual BangEqual Bang scanner
+    '=' -> scanTokenWithMaybeEqual EqualEqual Equal scanner
+    '<' -> scanTokenWithMaybeEqual LessEqual Less scanner
+    '>' -> scanTokenWithMaybeEqual GreaterEqual Greater scanner
+    '/' -> scanSlashOrIgnoreComment scanner
+    '"' -> scanString scanner
+    c | isWhiteSpace c -> extractTokens scanner
+    c | isDigit c -> scanNumber c scanner
+    c | isAlpha c -> scanWord c scanner
+    _ -> Left $ LexingError $ getLineNo scanner
 
-scanTokenWithMaybeEqual :: Token -> Token -> Scanner -> (Token, Scanner)
-scanTokenWithMaybeEqual tokenIf tokenElse state =
-  case advanceIf (== '=') state of
-    Nothing -> (tokenElse, state)
-    Just (_, newState) -> (tokenIf, newState)
+scanTokenWithMaybeEqual :: Token -> Token -> Scanner -> ScanTokenResult
+scanTokenWithMaybeEqual tokenIf tokenElse scanner =
+  case advanceIf (== '=') scanner of
+    Nothing -> prependToken tokenElse scanner
+    Just (_, newScanner) -> prependToken tokenIf newScanner
 
 scanSlashOrIgnoreComment :: Scanner -> ScanTokenResult
-scanSlashOrIgnoreComment state =
-  case peek state of
-    Just '/' -> scanToken $ advanceUntilEndOfLine state
-    _ -> Right (Slash, state)
-
-advanceUntilEndOfLine :: Scanner -> Scanner
-advanceUntilEndOfLine state =
-  let (_, newState) = advanceWhile (/= '\n') state
-   in newState
+scanSlashOrIgnoreComment scanner =
+  case peek scanner of
+    Just '/' -> extractTokens $ advanceUntilEndOfLine scanner
+    _ -> prependToken Slash scanner
 
 scanString :: Scanner -> ScanTokenResult
-scanString state =
-  let (str, newState) = advanceWhile (/= '"') state
-   in case advanceIf (== '"') newState of
-        Nothing -> Left $ LexingError $ getLineNo newState
-        Just (_, finalState) -> Right (StringToken str, finalState)
+scanString scanner =
+  let (str, newScanner) = advanceWhile (/= '"') scanner
+   in case advanceIf (== '"') newScanner of
+        Nothing -> Left $ LexingError $ getLineNo newScanner
+        Just (_, finalScanner) -> prependToken (StringToken str) finalScanner
 
 scanNumber :: Char -> Scanner -> ScanTokenResult
-scanNumber c state =
-  let (restOfIntegerPart, stateAfterInteger) = advanceWhile isDigit state
+scanNumber c scanner =
+  let (restOfIntegerPart, scannerAfterInteger) = advanceWhile isDigit scanner
       integerPart = c : restOfIntegerPart
-      (numberStr, finalState) = tryScanFractionalPart integerPart stateAfterInteger
-      maybeNumber = readMaybe numberStr :: Maybe Double
+      (fractionalPart, finalScanner) = advanceIfFractionalPart scannerAfterInteger
+      lexeme = integerPart ++ fractionalPart
+      maybeNumber = readMaybe lexeme :: Maybe Double
    in case maybeNumber of
-        Nothing -> Left $ LexingError $ getLineNo finalState
-        Just number -> Right (Number number, finalState)
+        Nothing -> Left $ LexingError $ getLineNo finalScanner
+        Just number -> prependToken (Number number) finalScanner
 
-tryScanFractionalPart :: String -> Scanner -> (String, Scanner)
-tryScanFractionalPart integerPart state =
-  case peek state of
-    Just '.' -> case peekNext state of
-      Just c
-        | isDigit c ->
-            let Just (_, stateAfterPoint) = advance state
-                (fractionalPart, stateAfterFractional) = advanceWhile isDigit stateAfterPoint
-                lexeme = integerPart ++ "." ++ fractionalPart
-             in (lexeme, stateAfterFractional)
-      _ -> (integerPart, state)
-    _ -> (integerPart, state)
-
-scanWord :: Char -> Scanner -> (Token, Scanner)
-scanWord c state =
-  let (restOfWord, stateAfterWord) = advanceWhile isAlphaNumeric state
+scanWord :: Char -> Scanner -> ScanTokenResult
+scanWord c scanner =
+  let (restOfWord, scannerAfterWord) = advanceWhile isAlphaNumeric scanner
       word = c : restOfWord
       token = wordToToken word
-   in (token, stateAfterWord)
+   in prependToken token scannerAfterWord
 
 wordToToken :: String -> Token
 wordToToken word =
@@ -168,3 +141,25 @@ wordToToken word =
     "var" -> VarToken
     "while" -> WhileToken
     _ -> Identifier word
+
+prependToken :: Token -> Scanner -> ScanTokenResult
+prependToken token scanner = do
+  (restOfTokens, finalScanner) <- extractTokens scanner
+  return (token : restOfTokens, finalScanner)
+
+advanceUntilEndOfLine :: Scanner -> Scanner
+advanceUntilEndOfLine scanner =
+  let (_, newScanner) = advanceWhile (/= '\n') scanner
+   in newScanner
+
+advanceIfFractionalPart :: Scanner -> (String, Scanner)
+advanceIfFractionalPart scanner =
+  case peek scanner of
+    Just '.' -> case peekNext scanner of
+      Just c
+        | isDigit c ->
+            let Just (_, scannerAfterPoint) = advance scanner
+                (fractionalPart, scannerAfterFractional) = advanceWhile isDigit scannerAfterPoint
+             in ('.' : fractionalPart, scannerAfterFractional)
+      _ -> ("", scanner)
+    _ -> ("", scanner)
