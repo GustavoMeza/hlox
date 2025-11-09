@@ -60,7 +60,7 @@ lexImpl scanner = do
     then return ([End], scannerAfterToken)
     else do
       (restOfTokens, finalScanner) <- lexImpl scannerAfterToken
-      return (token:restOfTokens, finalScanner)
+      return (token : restOfTokens, finalScanner)
 
 type ScanTokenResult = Either LexingError (Token, Scanner)
 
@@ -125,8 +125,8 @@ scanNumber c state =
       (numberStr, finalState) = tryScanFractionalPart integerPart stateAfterInteger
       maybeNumber = readMaybe numberStr :: Maybe Double
    in case maybeNumber of
-     Nothing -> Left $ LexingError $ getLineNo finalState
-     Just number -> Right (Number number, finalState)
+        Nothing -> Left $ LexingError $ getLineNo finalState
+        Just number -> Right (Number number, finalState)
 
 tryScanFractionalPart :: String -> Scanner -> (String, Scanner)
 tryScanFractionalPart integerPart state =
