@@ -95,9 +95,9 @@ spec = do
     it "Parses identifiers" $ do
       Lexer.lex "a1_" `shouldBe` Right [Identifier "a1_"]
     it "Fails if strenous character" $ do
-      Lexer.lex "@" `shouldBe` Left (LexingError 0)
+      Lexer.lex "@" `shouldBe` Left [LexingError 0]
     it "Counts line error" $ do
-      Lexer.lex "\n\n\"Hello\nWorld" `shouldBe` Left (LexingError 3)
+      Lexer.lex "\n\n\"Hello\nWorld" `shouldBe` Left [LexingError 3]
     it "Continues reading" $ do
       Lexer.lex
         "// this is a comment\n\

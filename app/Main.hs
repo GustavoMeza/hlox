@@ -3,6 +3,9 @@ module Main (main) where
 import Lexer
 import System.IO (getContents)
 
+printElements :: Show a => [a] -> IO ()
+printElements arr = mapM_ (putStrLn . show) arr
+
 main :: IO ()
 main = do
   sourceCode <- getContents

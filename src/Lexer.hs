@@ -1,7 +1,7 @@
 module Lexer (Lexer.lex, LexingError (..), Token (..)) where
 
 import CharLib
-import Scanner
+import Data.List
 import Text.Read (readMaybe)
 
 data Token
@@ -47,119 +47,138 @@ data Token
 
 data LexingError = LexingError Int deriving (Eq, Show)
 
-lex :: String -> Either LexingError [Token]
-lex src = do
-  (tokens, _) <- extractTokens $ Scanner src 0
-  return tokens
+lex :: String -> Either [LexingError] [Token]
+lex src =
+  let stateAfterSrc = foldl' advanceLexing (ScanNewToken $ GlobalState [] [] 0) src
+      (errors, tokens) = finalize stateAfterSrc
+   in if null errors
+        then Right tokens
+        else Left errors
 
-type ScanTokenResult = Either LexingError ([Token], Scanner)
+finalize :: ScanningState -> ([LexingError], [Token])
+finalize (ScanNewToken state) = errorsAndTokens state
+finalize (ScanMaybeEqual state token tokenEqual) = errorsAndTokens $ addToken token state
+finalize (ScanMaybeComment state) = errorsAndTokens $ addToken Slash state
+finalize (IgnoreUntilEol state) = errorsAndTokens state
+finalize (ScanString state str) = errorsAndTokens $ addError state
+finalize (ScanIntegerPart state str) = errorsAndTokens $ addNumberOrError str state
+finalize (MaybeScanFractionalPart state str) = errorsAndTokens $ addToken Dot $ addNumberOrError str state
+finalize (ScanFractionalPart state str) = errorsAndTokens $ addNumberOrError str state
+finalize (ScanWord state str) = errorsAndTokens $ addToken (wordToToken str) state
 
-extractTokens :: Scanner -> ScanTokenResult
-extractTokens scanner = do
-  case advance scanner of
-    Nothing -> return ([], scanner)
-    Just (c, newScanner) -> scanTokenStartingWith c newScanner
+data GlobalState = GlobalState [Token] [LexingError] Int
 
-scanTokenStartingWith :: Char -> Scanner -> ScanTokenResult
-scanTokenStartingWith c scanner =
+data ScanningState
+  = ScanNewToken GlobalState
+  | ScanMaybeEqual GlobalState Token Token
+  | ScanMaybeComment GlobalState
+  | IgnoreUntilEol GlobalState
+  | ScanString GlobalState String
+  | ScanIntegerPart GlobalState String
+  | MaybeScanFractionalPart GlobalState String
+  | ScanFractionalPart GlobalState String
+  | ScanWord GlobalState String
+
+advanceLexing :: ScanningState -> Char -> ScanningState
+advanceLexing (ScanNewToken state) c =
   case c of
-    '(' -> prependToken LeftParen scanner
-    ')' -> prependToken RightParen scanner
-    '{' -> prependToken LeftBrace scanner
-    '}' -> prependToken RightBrace scanner
-    ',' -> prependToken Comma scanner
-    '.' -> prependToken Dot scanner
-    '-' -> prependToken Minus scanner
-    '+' -> prependToken Plus scanner
-    ';' -> prependToken Semicolon scanner
-    '*' -> prependToken Star scanner
-    '!' -> scanTokenWithMaybeEqual BangEqual Bang scanner
-    '=' -> scanTokenWithMaybeEqual EqualEqual Equal scanner
-    '<' -> scanTokenWithMaybeEqual LessEqual Less scanner
-    '>' -> scanTokenWithMaybeEqual GreaterEqual Greater scanner
-    '/' -> scanSlashOrIgnoreComment scanner
-    '"' -> scanString scanner
-    c | isWhiteSpace c -> extractTokens scanner
-    c | isDigit c -> scanNumber c scanner
-    c | isAlpha c -> scanWord c scanner
-    _ -> Left $ LexingError $ getLineNo scanner
-
-scanTokenWithMaybeEqual :: Token -> Token -> Scanner -> ScanTokenResult
-scanTokenWithMaybeEqual tokenIf tokenElse scanner =
-  case advanceIf (== '=') scanner of
-    Nothing -> prependToken tokenElse scanner
-    Just (_, newScanner) -> prependToken tokenIf newScanner
-
-scanSlashOrIgnoreComment :: Scanner -> ScanTokenResult
-scanSlashOrIgnoreComment scanner =
-  case peek scanner of
-    Just '/' -> extractTokens $ advanceUntilEndOfLine scanner
-    _ -> prependToken Slash scanner
-
-scanString :: Scanner -> ScanTokenResult
-scanString scanner =
-  let (str, newScanner) = advanceWhile (/= '"') scanner
-   in case advanceIf (== '"') newScanner of
-        Nothing -> Left $ LexingError $ getLineNo newScanner
-        Just (_, finalScanner) -> prependToken (StringToken str) finalScanner
-
-scanNumber :: Char -> Scanner -> ScanTokenResult
-scanNumber c scanner =
-  let (restOfIntegerPart, scannerAfterInteger) = advanceWhile isDigit scanner
-      integerPart = c : restOfIntegerPart
-      (fractionalPart, finalScanner) = advanceIfFractionalPart scannerAfterInteger
-      lexeme = integerPart ++ fractionalPart
-      maybeNumber = readMaybe lexeme :: Maybe Double
-   in case maybeNumber of
-        Nothing -> Left $ LexingError $ getLineNo finalScanner
-        Just number -> prependToken (Number number) finalScanner
-
-scanWord :: Char -> Scanner -> ScanTokenResult
-scanWord c scanner =
-  let (restOfWord, scannerAfterWord) = advanceWhile isAlphaNumeric scanner
-      word = c : restOfWord
-      token = wordToToken word
-   in prependToken token scannerAfterWord
+    '(' -> ScanNewToken $ addToken LeftParen state
+    ')' -> ScanNewToken $ addToken RightParen state
+    '{' -> ScanNewToken $ addToken LeftBrace state
+    '}' -> ScanNewToken $ addToken RightBrace state
+    ',' -> ScanNewToken $ addToken Comma state
+    '.' -> ScanNewToken $ addToken Dot state
+    '-' -> ScanNewToken $ addToken Minus state
+    '+' -> ScanNewToken $ addToken Plus state
+    ';' -> ScanNewToken $ addToken Semicolon state
+    '*' -> ScanNewToken $ addToken Star state
+    '!' -> ScanMaybeEqual state Bang BangEqual
+    '=' -> ScanMaybeEqual state Equal EqualEqual
+    '<' -> ScanMaybeEqual state Less LessEqual
+    '>' -> ScanMaybeEqual state Greater GreaterEqual
+    '/' -> ScanMaybeComment state
+    '"' -> ScanString state ""
+    '\n' -> ScanNewToken $ incrementLine state
+    c | isWhiteSpace c -> ScanNewToken state
+    c | isDigit c -> ScanIntegerPart state [c]
+    c | isAlpha c -> ScanWord state [c]
+    _ -> ScanNewToken $ addError state
+advanceLexing (ScanMaybeEqual state token tokenEqual) c =
+  if c == '='
+    then ScanNewToken $ addToken tokenEqual state
+    else advanceLexing (ScanNewToken $ addToken token state) c
+advanceLexing (ScanMaybeComment state) c =
+  if c == '/'
+    then IgnoreUntilEol state
+    else advanceLexing (ScanNewToken $ addToken Slash state) c
+advanceLexing (IgnoreUntilEol state) c =
+  if c == '\n'
+    then ScanNewToken $ incrementLine state
+    else IgnoreUntilEol state
+advanceLexing (ScanString state str) c =
+  case c of
+    '"' -> ScanNewToken $ addToken (StringToken $ reverse str) state
+    '\n' -> ScanString (incrementLine state) (c : str)
+    _ -> ScanString state (c : str)
+advanceLexing (ScanIntegerPart state str) c =
+  case c of
+    c | isDigit c -> ScanIntegerPart state (c : str)
+    '.' -> MaybeScanFractionalPart state str
+    _ -> advanceLexing (ScanNewToken $ addNumberOrError str state) c
+advanceLexing (MaybeScanFractionalPart state str) c =
+  if isDigit c
+    then ScanFractionalPart state (c : '.' : str)
+    else advanceLexing (ScanNewToken $ addToken Dot $ addNumberOrError str state) c
+advanceLexing (ScanFractionalPart state str) c =
+  if isDigit c
+    then ScanFractionalPart state (c : str)
+    else advanceLexing (ScanNewToken $ addNumberOrError str state) c
+advanceLexing (ScanWord state str) c =
+  if isAlphaNumeric c
+    then ScanWord state (c : str)
+    else advanceLexing (ScanNewToken $ addToken (wordToToken str) state) c
 
 wordToToken :: String -> Token
-wordToToken word =
-  case word of
-    "and" -> AndToken
-    "class" -> ClassToken
-    "else" -> ElseToken
-    "false" -> FalseToken
-    "for" -> ForToken
-    "fun" -> FunToken
-    "if" -> IfToken
-    "nil" -> NilToken
-    "or" -> OrToken
-    "print" -> PrintToken
-    "return" -> ReturnToken
-    "super" -> SuperToken
-    "this" -> ThisToken
-    "true" -> TrueToken
-    "var" -> VarToken
-    "while" -> WhileToken
-    _ -> Identifier word
+wordToToken reversedWord =
+  let word = reverse reversedWord
+   in case word of
+        "and" -> AndToken
+        "class" -> ClassToken
+        "else" -> ElseToken
+        "false" -> FalseToken
+        "for" -> ForToken
+        "fun" -> FunToken
+        "if" -> IfToken
+        "nil" -> NilToken
+        "or" -> OrToken
+        "print" -> PrintToken
+        "return" -> ReturnToken
+        "super" -> SuperToken
+        "this" -> ThisToken
+        "true" -> TrueToken
+        "var" -> VarToken
+        "while" -> WhileToken
+        _ -> Identifier word
 
-prependToken :: Token -> Scanner -> ScanTokenResult
-prependToken token scanner = do
-  (restOfTokens, finalScanner) <- extractTokens scanner
-  return (token : restOfTokens, finalScanner)
+addToken :: Token -> GlobalState -> GlobalState
+addToken token (GlobalState tokens errors lineNo) =
+  GlobalState (token : tokens) errors lineNo
 
-advanceUntilEndOfLine :: Scanner -> Scanner
-advanceUntilEndOfLine scanner =
-  let (_, newScanner) = advanceWhile (/= '\n') scanner
-   in newScanner
+addNumberOrError :: String -> GlobalState -> GlobalState
+addNumberOrError str state =
+  let maybeNumber = readMaybe (reverse str) :: Maybe Double
+   in case maybeNumber of
+        Nothing -> addError state
+        Just number -> addToken (Number number) state
 
-advanceIfFractionalPart :: Scanner -> (String, Scanner)
-advanceIfFractionalPart scanner =
-  case peek scanner of
-    Just '.' -> case peekNext scanner of
-      Just c
-        | isDigit c ->
-            let Just (_, scannerAfterPoint) = advance scanner
-                (fractionalPart, scannerAfterFractional) = advanceWhile isDigit scannerAfterPoint
-             in ('.' : fractionalPart, scannerAfterFractional)
-      _ -> ("", scanner)
-    _ -> ("", scanner)
+incrementLine :: GlobalState -> GlobalState
+incrementLine (GlobalState tokens errors lineNo) =
+  GlobalState tokens errors (lineNo + 1)
+
+addError :: GlobalState -> GlobalState
+addError (GlobalState tokens errors lineNo) =
+  GlobalState tokens (LexingError lineNo : errors) lineNo
+
+errorsAndTokens :: GlobalState -> ([LexingError], [Token])
+errorsAndTokens (GlobalState tokens errors lineNo) =
+  (reverse errors, reverse tokens)

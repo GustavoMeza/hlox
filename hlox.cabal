@@ -22,7 +22,6 @@ library
   hs-source-dirs: src
 
   other-modules:
-      Scanner
       CharLib
 
   default-language: Haskell2010

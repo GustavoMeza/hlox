@@ -13,7 +13,7 @@ isAlpha :: Char -> Bool
 isAlpha c = c `elem` "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 
 isWhiteSpace :: Char -> Bool
-isWhiteSpace c = c `elem` " \r\t\n"
+isWhiteSpace c = c `elem` " \r\t"
 
 isAlphaNumeric :: Char -> Bool
 isAlphaNumeric c = isDigit c || isAlpha c
