@@ -1,10 +1,8 @@
 module Main (main) where
 
+import Parser
 import Lexer
 import System.IO (getContents)
-
-printElements :: Show a => [a] -> IO ()
-printElements arr = mapM_ (putStrLn . show) arr
 
 main :: IO ()
 main = do
@@ -12,4 +10,6 @@ main = do
   let lexingResult = Lexer.lex sourceCode
    in case lexingResult of
         Left error -> putStrLn $ show error
-        Right tokens -> printElements tokens
+        Right tokens -> case parseExpr (ParsingState tokens) of
+          Left error -> putStrLn $ show error
+          Right (_, expr) -> putStrLn $ show expr

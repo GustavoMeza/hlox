@@ -13,10 +13,12 @@ data Expr
   | UnaryExpr UnaryOperator Expr
   | BinaryExpr Expr BinaryOperator Expr
   | GroupingExpr Expr
+  deriving (Eq)
 
 data UnaryOperator
   = UnaryMinusOperator
   | BangOperator
+  deriving (Eq)
 
 data BinaryOperator
   = EqualEqualOperator
@@ -29,12 +31,14 @@ data BinaryOperator
   | BinaryMinusOperator
   | StarOperator
   | SlashOperator
+  deriving (Eq)
 
 data Literal
   = NumberLiteral Double
   | StringLiteral String
   | BoolLiteral Bool
   | NilLiteral
+  deriving (Eq)
 
 instance Show Expr where
   show (LiteralExpr literal) = show literal
