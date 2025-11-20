@@ -4,6 +4,7 @@ import Ast
 import Lexer
 import Parser
 import Test.Hspec
+import Data.Either (isLeft)
 
 spec :: Spec
 spec = do
@@ -64,6 +65,6 @@ spec = do
       parseExpr (ParsingState [Number 1.0, EqualEqual, Number 2.0, Less, Number 3.0]) `shouldBe` Right (ParsingState [], BinaryExpr (LiteralExpr $ NumberLiteral 1.0) EqualEqualOperator (BinaryExpr (LiteralExpr $ NumberLiteral 2.0) LessOperator (LiteralExpr $ NumberLiteral 3.0))) 
   describe "fails gracefully" $ do
     it "Empty expr returns error" $ do
-      parseExpr (ParsingState []) `shouldBe` Left ParsingError
+      parseExpr (ParsingState []) `shouldSatisfy` isLeft
     it "Missing parentheses returns error" $ do
-      parseExpr (ParsingState [LeftParen, Number 1.0]) `shouldBe` Left ParsingError
+      parseExpr (ParsingState [LeftParen, Number 1.0]) `shouldSatisfy` isLeft

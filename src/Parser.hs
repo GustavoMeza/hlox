@@ -3,7 +3,7 @@ module Parser (ParsingError(..), ParsingState(..), ParsingResult(..), parseExpr)
 import Lexer
 import Ast
 
-data ParsingError = ParsingError deriving (Eq, Show)
+data ParsingError = ParsingError String deriving (Eq, Show)
 data ParsingState = ParsingState {
   tokens :: [Token]
 } deriving (Eq, Show)
@@ -48,8 +48,8 @@ parsePrimary state =
         (stateAfterExpr, expr) <- parseExpr (ParsingState tokensAfterLeftParen)
         case tokens stateAfterExpr of
           RightParen:tokensAfterRightExpr -> Right (ParsingState tokensAfterRightExpr, GroupingExpr expr)
-          _ -> Left ParsingError 
-      _ -> Left ParsingError
+          _ -> Left $ ParsingError ("Expecting right parentheses:" ++ show (tokens stateAfterExpr))
+      _ -> Left $ ParsingError ("Expecting literal or left parentheses" ++ show (tokens state))
 
 type Matcher a = (Token -> Maybe a)
 
